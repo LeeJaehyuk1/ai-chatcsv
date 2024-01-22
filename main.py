@@ -19,17 +19,8 @@ st.write("---")
 # openai_key = st.text_input('OPEN_AI_API_KEY', type="password")
 
 #파일 업로드
-uploaded_file = st.file_uploader("PDF, TXT, CSV 파일을 올려주세요!",type=['pdf', 'txt', 'csv'])
+uploaded_file = st.file_uploader("CSV 파일을 올려주세요!",type=['csv'])
 st.write("---")
-
-def pdf_to_document(uploaded_file):
-    temp_dir = tempfile.TemporaryDirectory()
-    temp_filepath = os.path.join(temp_dir.name, uploaded_file.name)
-    with open(temp_filepath, "wb") as f:
-        f.write(uploaded_file.getvalue())
-    loader = PyPDFLoader(temp_filepath)
-    pages = loader.load_and_split()
-    return pages
 
 #업로드 되면 동작하는 코드
 if uploaded_file is not None:

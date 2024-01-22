@@ -1,16 +1,10 @@
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-
 # from dotenv import load_dotenv
 # load_dotenv()
-from langchain.document_loaders import PyPDFLoader, TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain_community.document_loaders.csv_loader import CSVLoader
+from langchain.vectorstores import FAISS
 import streamlit as st
 import pathlib
 import tempfile
@@ -63,14 +57,14 @@ if uploaded_file is not None:
 
     #Embedding
     embeddings_model = OpenAIEmbeddings()
-
+    vectorstores = FAISS.from_documents(data, embeddings_model)
     #persist_directory
-    persist_directory="C:\langchain/chatpdf2/"
+    # persist_directory="C:\langchain/chatpdf2/"
 
     # load it into Chroma
     # db = Chroma.from_documents(texts, embeddings_model)
-    db = Chroma.from_documents(data, embeddings_model, persist_directory=persist_directory)
-    db.persist()
+    # db = Chroma.from_documents(data, embeddings_model, persist_directory=persist_directory)
+    # db.persist()
 
     #Question
     st.header("CSV에게 질문해보세요!!")
@@ -78,7 +72,11 @@ if uploaded_file is not None:
 
     if st.button('질문하기'):
         with st.spinner('Wait for it...'):
+            # chain = ConversationalRetrievalChain.from_llm(
+            #     llm = ChatOpenAI(tempfile=0.0, model_name='gpt-3.5-turbo'),
+            #     retriever=vectorstores.as_retriever
+            # )
             llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
-            qa_chain = RetrievalQA.from_chain_type(llm,retriever=db.as_retriever())
+            qa_chain = RetrievalQA.from_chain_type(llm,retriever=vectorstores.as_retriever())
             result = qa_chain({"query": question})
             st.write(result["result"])

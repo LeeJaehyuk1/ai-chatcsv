@@ -18,7 +18,8 @@ import tempfile
 def csv_agent_func(file_path, user_message):
     """Run the CSV agent with the given file path and user message."""
     agent = create_csv_agent(
-        ChatOpenAI(temperature=0, model="gpt-3.5-turbo"),
+        # ChatOpenAI(temperature=0, model="gpt-3.5-turbo"),
+        ChatOpenAI(temperature=0, model="gpt-4"),
         file_path, 
         verbose=True,
         agent_type=AgentType.OPENAI_FUNCTIONS,

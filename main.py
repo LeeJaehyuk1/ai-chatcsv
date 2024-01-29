@@ -1,73 +1,122 @@
 # from dotenv import load_dotenv
 # load_dotenv()
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import RetrievalQA
-from langchain_community.document_loaders.csv_loader import CSVLoader
-from langchain.vectorstores import FAISS
 import streamlit as st
-import pathlib
-import tempfile
+import pandas as pd
+import json
+import openai
 import os
+import re
+import matplotlib.pyplot as plt
+# from langchain.agents import create_csv_agent
+from langchain_experimental.agents.agent_toolkits import create_csv_agent
+from langchain.chat_models import ChatOpenAI
+from langchain.agents.agent_types import AgentType
+import tempfile
+# from apikey import OPENAI_API_KEY
+# openai.api_key = OPENAI_API_KEY
+
+def csv_agent_func(file_path, user_message):
+    """Run the CSV agent with the given file path and user message."""
+    agent = create_csv_agent(
+        ChatOpenAI(temperature=0, model="gpt-3.5-turbo"),
+        file_path, 
+        verbose=True,
+        agent_type=AgentType.OPENAI_FUNCTIONS,
+    )
+
+    try:
+        # Properly format the user's input and wrap it with the required "input" key
+        tool_input = {
+            "input": {
+                "name": "python",
+                "arguments": user_message
+            }
+        }
+        
+        response = agent.run(tool_input)
+        return response
+    except Exception as e:
+        st.write(f"Error: {e}")
+        return None
+    
+
+def display_content_from_json(json_response):
+    """
+    Display content to Streamlit based on the structure of the provided JSON.
+    """
+    
+    # Check if the response has plain text.
+    if "answer" in json_response:
+        
+        st.write(json_response["answer"])
+
+    # Check if the response has a bar chart.
+    if "bar" in json_response:
+        data = json_response["bar"]
+        df = pd.DataFrame(data)
+        df.set_index("columns", inplace=True)
+        st.bar_chart(df)
+
+    # Check if the response has a table.
+    if "table" in json_response:
+        data = json_response["table"]
+        df = pd.DataFrame(data["data"], columns=data["columns"])
+        st.table(df)    
 
 
-#제목
-st.title("ChatCSV")
-st.write("---")
+def extract_code_from_response(response):
+    """Extracts Python code from a string response."""
+    # Use a regex pattern to match content between triple backticks
+    code_pattern = r"```python(.*?)```"
+    match = re.search(code_pattern, response, re.DOTALL)
+    
+    if match:
+        # Extract the matched code and strip any leading/trailing whitespaces
+        return match.group(1).strip()
+    return None
 
-#OpenAI KEY 입력 받기
-# openai_key = st.text_input('OPEN_AI_API_KEY', type="password")
 
-#파일 업로드
-uploaded_file = st.file_uploader("CSV 파일을 올려주세요!",type=['csv'])
-st.write("---")
+# def csv_analyzer_app():
+"""Main Streamlit application for CSV analysis."""
 
-#업로드 되면 동작하는 코드
+st.title('CSV Assistant')
+st.write('Please upload your CSV file and enter your query below:')
+
+uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+
 if uploaded_file is not None:
+    file_details = {"FileName": uploaded_file.name, "FileType": uploaded_file.type, "FileSize": uploaded_file.size}
+    st.write(file_details)
+    
+    # Save the uploaded file to disk
+    # file_path = os.path.join("D:\GPT\tmp", uploaded_file.name)
+    # with open(file_path, "wb") as f:
+    #     f.write(uploaded_file.getbuffer())
 
-   #use tempfile because CSVLoader only accepts a file_path
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
         tmp_file.write(uploaded_file.getvalue())
-        tmp_file_path = tmp_file.name
+        tmp_file_path = tmp_file.name    
+    
+    df = pd.read_csv(tmp_file_path, thousands = ',')
+    print(df)
+    st.dataframe(df)
+    
+    user_input = st.text_input("Your query")
+    if st.button('Run'):
+        response = csv_agent_func(tmp_file_path, user_input)
+        
+        # Extracting code from the response
+        code_to_execute = extract_code_from_response(response)
+        
+        if code_to_execute:
+            try:
+                # Making df available for execution in the context
+                exec(code_to_execute, globals(), {"df": df, "plt": plt})
+                fig = plt.gcf()  # Get current figure
+                st.pyplot(fig)  # Display using Streamlit
+            except Exception as e:
+                st.write(f"Error executing code: {e}")
+        else:
+            st.write(response)
 
-    loader = CSVLoader(file_path=tmp_file_path, encoding="euc-kr", csv_args={
-                'delimiter': ','})
-    data = loader.load()
-  
-    # st.write(data)
-
-    #Split
-    # text_splitter = RecursiveCharacterTextSplitter(
-    #     # Set a really small chunk size, just to show.
-    #     chunk_size = 300,
-    #     chunk_overlap  = 20,
-    #     length_function = len,
-    #     is_separator_regex = False,
-    # )
-    # texts = text_splitter.split_documents(pages)
-
-    #Embedding
-    embeddings_model = OpenAIEmbeddings()
-    vectorstores = FAISS.from_documents(data, embeddings_model)
-    #persist_directory
-    # persist_directory="C:\langchain/chatpdf2/"
-
-    # load it into Chroma
-    # db = Chroma.from_documents(texts, embeddings_model)
-    # db = Chroma.from_documents(data, embeddings_model, persist_directory=persist_directory)
-    # db.persist()
-
-    #Question
-    st.header("CSV에게 질문해보세요!!")
-    question = st.text_input('질문을 입력하세요')
-
-    if st.button('질문하기'):
-        with st.spinner('Wait for it...'):
-            # chain = ConversationalRetrievalChain.from_llm(
-            #     llm = ChatOpenAI(tempfile=0.0, model_name='gpt-3.5-turbo'),
-            #     retriever=vectorstores.as_retriever
-            # )
-            llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
-            qa_chain = RetrievalQA.from_chain_type(llm,retriever=vectorstores.as_retriever())
-            result = qa_chain({"query": question})
-            st.write(result["result"])
+st.divider()

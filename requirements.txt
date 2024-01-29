@@ -1,4 +1,2 @@
 langchain
 openai
-faiss-cpu
-tempfile
